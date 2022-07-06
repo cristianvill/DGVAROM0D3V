@@ -1,0 +1,32 @@
+! This file contains parameter setting for Data Driven Boltzmann module
+!
+! DO NOT CHANGE THE PARAMETER NAMES! INTEGERS are limited to 6 digits! 
+!
+!
+! "," is a separator, IMPORTANT: ",4" will be read as two numbers, "0" and "4"
+! "." is the decimal point
+!  
+! parameter description (name) must not change including no adding extra spaces between words! 
+! 
+! the parameter description ends with  "=" whish is followed by the parameter value
+! 
+! the program will ignore all lines that start with "!"
+! 
+!!!!!!!!!!!!!!!!!!!!!!!!
+name sol file read  =        Mach4      ! name_solutions_file_read  name of the file to read the solutions from 
+
+!!!
+name sing vec file read = SpHom100Trim0SVs_SVZeroBasisReadFort ! svdname name of the file where singular vectors are recorded. 
+use SV Zero basis =  yes ! flag_SVZeroBasisInUse yes is using SV zero basis otherwise no. Yes will cause to look for linear kernel
+
+!!!
+header s vec kernel file = SVZeroCln100M41Tr0SVKrnlk65Opt ! SVKrnl_name name of a file where Collision kernel of SVD decomposition is stored. Can be stored in chunkcs, then _ch00X will be added to the name
+first entry svkernel     = 1                          ! si_start the index of the first record to read or write into the file SVKrnl_name
+last entry svkernel      = 6                          ! si_end the index of the last record to read or write into the file SVKrnl_name
+header SVzr lin ker file = SVZeroCln100M41Tr0KrnlP5   ! DO Not include "_BKrnl.dat" part.  SVLinKrnl_name name of the file where Linearized Kernel is kept -- is used with the SVzero basis
+number of svkernel chunks = 1                         ! num_SVKernl_chnks components of the sing. vect. kernel may be recorded in several files in chunks. each chunk will be designated by _ch00X added to the name 
+target size ROM basis   = 35                          ! k_tgt -- the target size of the ROM basis. Can use k_end instead of basing it on entries of SVKernel Array
+first i svkernel        = 1                           ! i_start to be used in Mk_Coll_Ker_SVD_Basis_MACRO_Optml -- determines first index i to use 
+last i svkernel         = 48                          ! i_end   to be used in Mk_Coll_Ker_SVD_Basis_MACRO_Optml -- determines last index i to use
+
+! end of file 
