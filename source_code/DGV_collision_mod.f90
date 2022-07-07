@@ -3521,15 +3521,16 @@ use DGV_commvar, only: run_mode,mol_diam,L_inf,N_inf,T_inf,C_inf,gas_viscosity,g
 				   nodes_u,nodes_v,nodes_w
                    
 use DGV_dgvtools_mod
+use DGV_distributions_mod
 
 !temporary to write out the results of the collision
 use BGKVDCF0D_commvar, only:  fb=>f
 use BGKVDCF0D_readwrite
-!  use DGV_data_driven_boltz UNCOMMENT WHEN WILL USE ROM MODEL
+use DGV_data_driven_boltz
 
 intrinsic MAXVAL, MAX
 
-real (DP), dimension (:), intent (in) :: f ! the solution at the current  
+real (DP), dimension (:) :: f ! the solution at the current  
 real (DP), dimension (:), intent (out) :: fcol ! value of the right side  
 real (DP), intent (in) :: time ! the current time
 real (DP), intent (in) :: dt ! The time step 
@@ -3573,11 +3574,33 @@ select case (run_mode) ! run_mode is set outside, when solution is evaluated for
       !call EvalFourierColTwoF_HO(f+f-Df,Df,fcol)
       !!!! ROM MODEL
       ! call DGV_ROM_DtaDrvnColl_0D(f,fcol)
-      ! call DGV_ROM_DDColl_MxdTrms_0D(f+f-Df,Df,fcol)
+      !call DGV_ROM_DDColl_MxdTrms_0D(f+f-Df,Df,fcol)
+      !!!!! ATTENTION: uncomment this if using SV Zero Basis
+      call DGV_ROM_SVZrBasisColl_0D(Df,fcol)
+      !!!!!!!!!!!!!!!!!! END SV Zero Basis !!!!!!!!!!!!!!
       !!!! 
       coef_temp = (mol_diam/L_inf)**2*N_inf*dt
 	  fcol = fcol*coef_temp
-	  !! 
+	  !!
+	  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	  !!!!!! ROM MODEL damping orthogonal projection: 
+	  !!!!!! uncomment if using damping of orthogonal projection with ROM model
+	  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      !!!!! this makes an addition to the collision operator that damps the 
+      !!!!! part of the solution that is orthogonal tot he ROM basis
+      !!!!! uncomment if using the damping
+      allocate (fcol_scr(1:size(fcol,1)), stat=loc_alloc_stat)
+      if (loc_alloc_stat >0) then 
+       print *, "UniversalCollisionOperator0DDGV: Allocation error for variables (fcol_scr)"
+       stop
+      end if
+      call ROMOrthCompESBGKDamp(f,Df,fcol_scr)
+      coef_temp = (kBoltzmann*N_inf)*C_inf/(2*gasR)/L_inf**2/gas_viscosity*dt  
+      fcol_scr = fcol_scr*coef_temp
+      fcol=fcol+fcol_scr
+      deallocate(fcol_scr)
+      !!!!!!  END ROM orthogonal compliment damping
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
 	  !!!!
 	case (1) ! this is the non-linear perturbation mode: we need both the linear part and the non-linear 
 	  !!!!!!!!!!!! set us the allocatable array !
@@ -3631,6 +3654,9 @@ select case (run_mode) ! run_mode is set outside, when solution is evaluated for
       !!!! ROM MODEL
       ! call DGV_ROM_DtaDrvnColl_0D(f, fcol)
       ! call DGV_ROM_DDColl_MxdTrms_0D(f+f-Df,Df,fcol)
+      !!!!! ATTENTION: uncomment this if using SV Zero Basis
+      call DGV_ROM_SVZrBasisColl_0D(Df,fcol)
+      !!!!!!!!!!!!!!!!!! END SV Zero Basis !!!!!!!!!!!!!!
             
       !!!!!!!!!!!!!!!!!!!!!!!!!
       !! Print report 
@@ -3681,11 +3707,29 @@ select case (run_mode) ! run_mode is set outside, when solution is evaluated for
       !print *,"rel Linf err:", xxx0
       !print *,"rel L1 err:",xxx1
       !print *,"rel L2 err:",xxx2
-      
-      
       !deallocate(fcol_scr)
       !stop
 	  !!
+	  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	  !!!!!! ROM MODEL damping orthogonal projection: 
+	  !!!!!! uncomment if using damping of orthogonal projection with ROM model
+	  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      !!!!! this makes an addition to the collision operator that damps the 
+      !!!!! part of the solution that is orthogonal tot he ROM basis
+      !!!!! uncomment if using the damping
+      allocate (fcol_scr(1:size(fcol,1)), stat=loc_alloc_stat)
+      if (loc_alloc_stat >0) then 
+       print *, "UniversalCollisionOperator0DDGV: Allocation error for variables (fcol_scr)"
+       stop
+      end if
+      call ROMOrthCompESBGKDamp(f,Df,fcol_scr)
+      coef_temp = (kBoltzmann*N_inf)*C_inf/(2*gasR)/L_inf**2/gas_viscosity*dt  
+      fcol_scr = fcol_scr*coef_temp
+      fcol=fcol+fcol_scr
+      deallocate(fcol_scr)
+      !!!!!!  END ROM orthogonal compliment damping
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	  
 	case (2) ! this is the linear mode, we pretty much neglect the quadratic part..
    !   allocate (fcol_scr(1:size(fcol,1)), stat=loc_alloc_stat)
    !   if (loc_alloc_stat >0) then 
@@ -3704,14 +3748,46 @@ select case (run_mode) ! run_mode is set outside, when solution is evaluated for
       !call EvalColFftPeriodicGainA_OMP(f, fcol)
       !call EvalColPeriodicGainA_DGVII_OMP(f, fcol)
       !call EvalFourierColTwoF_OMP(f+f-Df,Df,fcol)
-      call EvalFourierColTwoF_HO(f+f-Df,Df,fcol)
-      
-      
-      
+      !call EvalFourierColTwoF_HO(f+f-Df,Df,fcol)
       !call TruncFRadius(fcol, 3.0_DP)
-	  !! Now we are addiing the dimensionless coefficient mol_diam^2*N_inf/(L_inf)^2
+	  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	  !!!!   ROM MODEL
+	  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	  !!!! uncomment if using SVD ROM basis !!!!!!!!!!!!
+	  !!!!
+      ! call DGV_ROM_DtaDrvnColl_0D(f, fcol)
+      ! call DGV_ROM_DDColl_MxdTrms_0D(f+f-Df,Df,fcol)
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      !!!!! ATTENTION: uncomment this if using SV Zero Basis
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      call DGV_ROM_SVZrBasisLinColl_0D(Df,fcol)
+      !!!!!!!!!!!!!!!!!! END SV Zero Basis !!!!!!!!!!!!!!
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      !!!!!!  END OF ROM MODEL 
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      
+      !! Now we are addiing the dimensionless coefficient mol_diam^2*N_inf/(L_inf)^2
 	  coef_temp = (mol_diam/L_inf)**2*N_inf*dt
 	  fcol = fcol*coef_temp
+	  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	  !!!!!! ROM MODEL damping orthogonal projection: 
+	  !!!!!! uncomment if using damping of orthogonal projection with ROM model
+	  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      !!!!! this makes an addition to the collision operator that damps the 
+      !!!!! part of the solution that is orthogonal tot he ROM basis
+      !!!!! uncomment if using the damping
+      allocate (fcol_scr(1:size(fcol,1)), stat=loc_alloc_stat)
+      if (loc_alloc_stat >0) then 
+       print *, "UniversalCollisionOperator0DDGV: Allocation error for variables (fcol_scr)"
+       stop
+      end if
+      call ROMOrthCompESBGKDamp(f,Df,fcol_scr)
+      coef_temp = (kBoltzmann*N_inf)*C_inf/(2*gasR)/L_inf**2/gas_viscosity*dt 
+      fcol_scr = fcol_scr*coef_temp
+      fcol=fcol+fcol_scr
+      deallocate(fcol_scr)
+      !!!!!!  END ROM orthogonal compliment damping
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	case (3) ! the velocity dep. ES-BGK mode
 		coef_temp = (kBoltzmann*N_inf)*C_inf/(2*gasR)/L_inf**2/gas_viscosity
 	    !! Now we are adding the dimensionless coefficient
