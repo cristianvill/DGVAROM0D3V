@@ -30,9 +30,9 @@
       use DGV_collision_mod
       use DGV_sf02
       use DGV_miscset
-      use DGV_data_driven_boltz
-      use DGV_dta_drvn_bol_macro
-      use TrnColl_Subs
+      use AROM_data_driven_boltz
+      use AROM_dta_drvn_bol_macro
+      use AROM_TrnColl_Subs
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       ! Establish access to the variables in the DGV library
       use DGV_commvar,only: Mv,Mu,Mw,su,sv,sw,nodes_u,nodes_v,nodes_w,nodes_gwts,A_capphi,&
@@ -122,23 +122,27 @@ Integer :: Status
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!! 
 !!!  Comment if you are not using ROM model 
-      call Init0D_DataDrvnBoltzn ! this will set up a couple of arrays int he memory: Projector and ROMKrnl These arrays are used 
+!      call Init0D_DataDrvnBoltzn ! this will set up a couple of arrays int he memory: Projector and ROMKrnl These arrays are used 
                                  ! during time evolution. 
 !!!
 ! End Initialization of the DGV Library:
+      
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !   call cpu_time (pr_time_2)
 !   print *, "Processor time lapsed in seconds on thread 0:", pr_time_2 - pr_time_1
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      
 !!! Allocate arrays for gaussian nodes and weights to inegration in the first variable
-     allocate (f(1:size(nodes_u,1)), fcol(1:size(nodes_u,1)),fproj(1:size(nodes_u,1)), stat=loc_alloc_stat)
+     allocate (f(1:size(nodes_u,1)), fcol(1:size(nodes_u,1)), stat=loc_alloc_stat)
 !     allocate (fmA(1:size(nodes_u,1),1:size(nodes_u,1)), stat=loc_alloc_stat)
      if (loc_alloc_stat >0) then 
      print *, "DGVblzm: Allocation error for variables (f), (fcol)"
      end if 
+
+     
+     
+     
      
   !!!!!!!!!!!!!!!!!!!!! TIME EVOLUTION !!!!
     rkmts = 5
@@ -152,7 +156,14 @@ Integer :: Status
      err_count=0
      suff = "i"
          
-       
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!      
+!!! Comment if you are not using adaptive ROM
+    call AROM_InitFrezFprojProjector (frez,fproj,n,ubar,vbar,wbar,temp)      
+!!!       
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+     
+     
+     
      ! call WriteSol_BGK0D (suff)
      ! compute the macroparameters of the initial data and save it on disk
      !!!!!!!!!!!!!!!!!!!!

@@ -3512,9 +3512,8 @@ end subroutine UniversalCollisionOperator1DonecellDGV
 ! The subroutine accesses variables of DGV_commvar
 ! 
 !!!!!!!!!!!!!!!!!!!!
-
-subroutine UniversalCollisionOperator0DDGV(f,fcol,time,dt)
-
+ 
+subroutine UniversalCollisionOperator0DDGV(f,fproj,fcol,time,dt)  !!!! adding the fproj -- ROM projected portion of he solution
 use DGV_commvar, only: run_mode,mol_diam,L_inf,N_inf,T_inf,C_inf,gas_viscosity,gasR,&
 				   alpha,gas_T_reference,gas_alpha,nodes_gwts,pad,&
 				   !debug
@@ -5433,6 +5432,8 @@ end do
 Fcol=Mu*su*Mv*sv*Mw*sw*Fcol
 
 end subroutine PadFourierCol
+
+
 
 
 

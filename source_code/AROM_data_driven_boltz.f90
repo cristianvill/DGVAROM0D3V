@@ -29,31 +29,10 @@ use nrtype ! contains kind parameters (DP), (DP), (I4B) etc.
    implicit none
 
 
-real (DP), dimension (:,:), allocatable :: sol_array ! arrays to store values of solution files that we read from the hard drive and the corresponding 
-                                      ! array to store the outputs of the collsiion operator
-real (DP), dimension (:,:), allocatable :: Projector ! These is the matrix that will do projection and recovery of the ROM model
-real (DP), dimension (:,:), allocatable :: LinROMKrnl ! These is the matrix will contain linear kernel for the ROM model. Only is used if SV Zero Basis is used.
-
-real (DP), dimension (:), allocatable :: ROMKrnl ! This is an array that will keep the components of the singular vector collision kernel
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!
-character (len=132) :: name_solutions_file_read  ! name of the file that contains solutions/VDFs that will be read from the drive to prepare data 
-character (len=132) :: SVKrnl_name ! the variable to store the name of the output collision kernel data file 
-character (len=132) :: SVLinKrnl_name ! the variable to store the name of the Linear collision kernel data file -- used with the SV Zero Basis 
-character (len=132) :: SVfile_name ! the variable to store the name of the file where svd vectors are stored.
-integer (I4B) :: si_start ! the number of the first entry of the collision kernel array to compute -- using single inmdex and the above numbering conventions
-integer (I4B) :: si_end   ! the number of the last entry of the collision kernel array to compute 
-integer (I4B) :: num_SVKernl_chnks     ! components of signular Vector kernel may be computed in portions and stored in multiple files, call chunks. This parameter give the total number of chunks. 
-                                       ! chunk enumeration starts from 0.
-                                       
-integer (I4B) :: k_tgt, i_start, i_end ! k_tgt - target size of the ROM basis. i_start and i_end --- parameters determining the portiopn of the ROM binary 
-                                       ! kernel to be computed using the Mk_Coll_Ker_SVD_Basis_MACRO_Optml subroutine.                                        
-logical :: flag_SVZeroBasisInUse    ! this variable will keep a flag indicating that SV  Zero Basis is in use -- this will call for different collision operator, compared to other bases.                                    
-
 contains 
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!! This module will have a shrot dedicated parameter file. 
+!! This module will have a short dedicated parameter file. 
 !!
 !! Here is a subrouine that reads it. 
 !!
@@ -75,6 +54,8 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 subroutine SetDGVParams_DataDrivenBLZM(pfname,slt)
+
+use AROM_commvar   ! will have access to all variables
 
 use DGV_readwrite
 
@@ -316,7 +297,7 @@ write (15) m,n ! m gives the number of velocity nodes and n is the number of VDF
 ! A quick check that the storages are the correct size: 
 write (15) fcol_arry
 close (15)
-print *, "WriteArryColl_DtaDrvnB: successfully written copies of solution on the hard drive " 
+print *, "WriteArryColl_DtaDrvnB: successfully written copies of collision operator on the hard drive " 
 
 end subroutine WriteArryColl_DtaDrvnB  
 
@@ -578,7 +559,7 @@ integer (I4B) :: loc_alloc_stat ! to keep allocation status
 !! Matrices Project, Recover and ROMKrnl are set up by Init0D_DataDrvnBoltzn
 !! Make sure Init0D_DataDrvnBoltzn has been called. 
 !!!!
-k_end = size(Projector,2) 
+k_end = size(Projector,2) ! Projector is the matrix containing basis vectors of the ROM
 mm = size(Projector,1)
 
 !!!!!!!!!!!! A couple os sanity checks: 
@@ -1117,6 +1098,72 @@ RHS = -nu*fperp
 deallocate (fperp)
 !
 end subroutine ROMOrthCompESBGKDamp
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!! Subroutines for Adaptive ROM
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!    AROM_InitProjector0D (frez, froj,n,ubar,vbar,wbar,temp) 
+!
+!
+!  This subroutine is called at the time of initialization of the 0D solution. 
+!  It will initialize Projector matrix with a single column --- the deviation from the steady state 
+!  maxwellian 
+!
+!  Input -- frez contains the solution initial data
+!
+!
+!  Output  --  frez -- will contain zero
+!              fproj --- coefficient of the projection of the deviation of solution from the local maxwellian 
+!                        (since the deviation of the solution from the local maxwellian is the first 
+!                        basis function, it will be pretty much two norm of the deviation
+! 
+!              n,ubar,vbar,wbar,temp --- coefficients of the local maxwellian
+!
+!  In addition, the subroutine will create the Projector array with one column --- it will contain
+!  the deviation normalized to unit l2-vector norm
+!!!!!  
+subroutine AROM_InitFrezFprojProjector (frez,fproj,n,ubar,vbar,wbar,temp)
+
+use  AROM_commvar, only Projector ! matrix that keep the ROM basis in it
+
+use DGV_commvar, only nodes_gwts,nodes_u,nodes_v,nodes_w
+use DGV_distributions_mod
+
+
+real (DP), intent (out) :: n,ubar,vbar,wbar,temp  ! macroparameters of the local maxwellian 
+real (DP), dimension (:), intent (out) :: frez    ! at the call of te subrountine, frez will contain the solution
+real (DP), dimension (:), allocatable, intent (out) :: fproj 
+
+!!!!!!!!!!!!
+real (DP) :: nfrez ! scrap variable 
+integer (I4B) :: gg,loc_alloc_stat ! to keep them allocation status
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! First, we will evaluate the macroparameters of density, bulk velocity and temperature in the solution 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+n = sum(frez*nodes_gwts)                       ! density
+ubar = sum(frez*nodes_gwts*nodes_u)/n          ! components of bulk velocity
+vbar = sum(frez*nodes_gwts*nodes_v)/n
+wbar = sum(frez*nodes_gwts*nodes_w)/n
+temp = sum(frez*nodes_gwts*((nodes_u-ubar)**2+(nodes_v-vbar)**2+(nodes_w-wbar)**2))/n/3.0_DP*2.0_DP ! dimensionless temperature
+! Now we subtract the steady state Maxwellian from the solution to determine the second basis vector (the first is the Maxwellian)
+frez = frez - maxwelveldist(temp,ubar,vbar,wbar,n,nodes_u,nodes_v,nodes_w) ! now we populate the maxwellian with the same macroparamters.
+! 
+nfrez = sqrt(sum(frez*frez)) ! evaluate the norm
+!now we are ready to initialize both fproj and the Projector. 
+allocate (fproj(1:1), Projector(1:size(nodes_u,1),1), stat=loc_alloc_stat)  ! projector has the basis vectors 
+if (loc_alloc_stat >0) then 
+   print *, "AROM_InitFrezFprojProjector: Allocation error for variables (fproj), (Projector)"
+end if 
+!!!! The first basis vector is the difference f-f_M which should be in frez
+Projector(:,1) = frez / nfrez  ! the first basis vector = deviation from the Maxwellian in the initial data 
+fproj(1) = nfrez               ! coefficient of the deviation in the ROM basis
+!!!!  all done here
+
+end subroutine AROM_InitFrezFprojProjector
 
 
 
